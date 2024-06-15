@@ -1,0 +1,106 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main", "web" ]
+  pull_request:
+    branches: [ "main", "web" ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+        sudo apt install libgl-dev
+
+    - name: Configure CMake
+      run: cmake --preset=linux-gcc-debug
+
+    - name: Get number of CPU cores
+      uses: SimenB/github-actions-cpu-cores@v1
+      id: cpu-cores
+
+    - name: Build
+      run: cmake --build --preset=linux-gcc-debug --parallel ${{ steps.cpu-cores.outputs.count }}
+
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Config CMake
+        run: cmake --preset=macos-xcode-debug
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Build
+        run: cmake --build --preset=macos-xcode-debug --parallel ${{ steps.cpu-cores.outputs.count }}
+
+  build-windows-vs:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Configure CMake with Visual Studio
+      run: cmake -Bbuild .
+
+    - name: Get number of CPU cores
+      uses: SimenB/github-actions-cpu-cores@v1
+      id: cpu-cores
+
+    - name: Build with Visual Studio
+      run: cmake --build build --parallel ${{ steps.cpu-cores.outputs.count }}
+
+  build-windows-mingw:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Configure CMake
+      run: cmake --preset=windows-mingw-debug
+
+    - name: Build
+      run: cmake --build --preset=windows-mingw-debug --parallel 1
+
+  build-web:
+    if: ${{ github.ref == 'refs/heads/web' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install and activate emsdk
+        run: |
+          git clone --depth=1 https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+          source ./emsdk_env.sh
+          echo "$PATH" >> $GITHUB_PATH
+          cd ..
+
+      - name: Build
+        run: |
+          python3 build_webassembly.py
